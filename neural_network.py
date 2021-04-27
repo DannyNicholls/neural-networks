@@ -3,57 +3,122 @@
 import numpy as np
 
 
-def initialise_parameters(layer_dimensions, seed=42):
+def initialise_model_parameters(layer_dimensions, seed=42):
     np.random.seed(seed)
-    layers = len(layer_dimensions)
-    parameters = {}
-    for layer in range(1, layers):
-        weights = np.random.randn(layer_dimensions[layer],
-                                  layer_dimensions[layer - 1]) * 0.01
-        bias = np.zeros((layer_dimensions[layer], 1))
-        parameters["L" + str(layer) + "_weights"] = weights
-        parameters["L" + str(layer) + "_bias"] = bias
-    return parameters
+    number_of_layers = len(layer_dimensions)
+    model_parameters = {}
+    for layer in range(1, number_of_layers):
+        number_of_inputs = layer_dimensions[layer - 1]
+        number_of_nodes = layer_dimensions[layer]
+        W = np.random.randn(number_of_inputs, number_of_nodes) * 0.01
+        b = np.zeros((number_of_nodes, 1))
+        model_parameters["W" + str(layer)] = W
+        model_parameters["b" + str(layer)] = b
+    return model_parameters
 
 
-def linear_prediction(weights, input_activation, bias):
-    return np.dot(weights.T, input_activation) + bias
+def linear_prediction(W, input_activation, b):
+    Z = np.dot(W.T, input_activation) + b
+    return Z
 
 
-def compute_activation(z, activation_function):
+def compute_activation(Z, activation_function):
     if activation_function == 'relu':
-        return np.fmax(0, z)
+        A = np.fmax(0, Z)
     elif activation_function == 'sigmoid':
-        return 1 / (1 + np.exp(-z))
+        A = 1 / (1 + np.exp(-Z))
+    return A
 
 
-def compute_cost(predictions, actual_values):
-    m = actual_values.shape[1]
-    cost = -1/m * np.sum(np.log(predictions)
-                         + (1 - actual_values) * np.log(1 - predictions))
-    return cost
+def forward(X, model_parameters):
+    number_of_layers = (len(model_parameters) + 2) // 2
+    activations = {'A0': X}
+
+    for layer in range(1, number_of_layers):
+        W = model_parameters['W' + str(layer)]
+        Aprev = activations["A" + str(layer - 1)]
+        b = model_parameters['b' + str(layer)]
+        Z = linear_prediction(W, Aprev, b)
+        activation_function = ('sigmoid' if layer == number_of_layers - 1
+                               else 'relu')
+        A = compute_activation(Z, activation_function)
+        activations["A" + str(layer)] = A
+
+    return activations
 
 
-def compute_linear_gradients(d_loss_wrt_z, weights, input_activation):
-    m = d_loss_wrt_z.shape[1]
-    d_loss_wrt_weights = 1/m * np.dot(input_activation, d_loss_wrt_z.T)
-    d_loss_wrt_bias = 1/m * np.sum(d_loss_wrt_z, axis=1, keepdims=True)
-    d_loss_wrt_input_activation = np.dot(weights, d_loss_wrt_z)
-    return d_loss_wrt_weights, d_loss_wrt_bias, d_loss_wrt_input_activation
+def compute_cost(Yhat, Y):
+    m = Y.shape[1]
+    cost = -1/m * np.sum(Y * np.log(Yhat) + (1 - Y) * np.log(1 - Yhat))
+    dYhat = - (np.divide(Y, Yhat) - np.divide(1 - Y, 1 - Yhat))
+    return cost, dYhat
 
 
-def compute_activation_gradient(output_activation,
-                                d_loss_wrt_output_activation,
-                                activation_function):
+def compute_activation_gradient(A, dA, activation_function):
+    dJdA = dA
     if activation_function == 'relu':
-        pass
+        dAdZ = 1 if A > 0 else 0
     elif activation_function == 'sigmoid':
-        d_output_activation_wrt_z = (output_activation
-                                     * (1 - output_activation))
+        dAdZ = (A * (1 - A))
+    dZ = dAdZ * dJdA
+    return dZ
 
-    d_loss_wrt_z = d_output_activation_wrt_z * d_loss_wrt_output_activation
-    return d_loss_wrt_z
+
+def compute_linear_gradients(dZ, W, Aprev):
+    m = dZ.shape[1]
+    dW = 1/m * np.dot(Aprev, dZ.T)
+    db = 1/m * np.sum(dZ, axis=1, keepdims=True)
+    dAprev = np.dot(W, dZ)
+    return dW, db, dAprev
+
+
+def backward(dYhat, model_parameters, activations):
+    number_of_layers = len(activations) // 2
+    gradients = {'dA' + str(number_of_layers - 1): dYhat}
+
+    for layer in reversed(range(1, number_of_layers)):
+        W = model_parameters['W' + str(layer)]
+        A = activations['A' + str(layer)]
+        activation_function = 'sigmoid' if layer == number_of_layers else 'relu'
+        dA = gradients['dA' + str(layer)]
+        dZ = compute_activation_gradient(A, dA, activation_function)
+        Aprev = activations['A' + str(layer - 1)]
+        dW, db, dAprev = compute_linear_gradients(dZ, W, Aprev)
+
+        gradients['dW' + str(layer)] = dW
+        gradients['db' + str(layer)] = db
+        gradients['dA' + str(layer - 1)] = dAprev
+
+    return gradients
+
+
+def update_model_parameters(model_parameters, gradients, learning_rate):
+    number_of_layers = (len(model_parameters) + 2) // 2
+
+    for layer in range(1, number_of_layers):
+        model_parameters['W' + str(layer)] -= (learning_rate
+                                               * gradients['W' + str(layer)])
+        model_parameters['b' + str(layer)] -= (learning_rate
+                                               * gradients['b' + str(layer)])
+
+    return model_parameters
+
+
+def train(X_train, Y_train, layer_dimensions, number_of_iterations):
+    number_of_layers = len(layer_dimensions)
+    model_parameters = initialise_model_parameters(layer_dimensions)
+
+    for _ in range(number_of_iterations):
+        activations = forward(X_train, model_parameters)
+        cost, dYhat = compute_cost(activations['A' + str(number_of_layers - 1)],
+                                   Y_train)
+        gradients = backward(dYhat, model_parameters, activations)
+        model_parameters = update_model_parameters(model_parameters,
+                                                   gradients,
+                                                   0.1)
+
+    return model_parameters
 
 
 if __name__ == '__main__':
-    pass
+    predictions = [1 if a > 0.5 else 0 for a in A]
