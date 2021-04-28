@@ -1,5 +1,6 @@
 # None of this has been tested.
 
+import matplotlib.pyplot as plt
 import numpy as np
 
 
@@ -104,11 +105,12 @@ def update_model_parameters(model_parameters, gradients, learning_rate):
     return model_parameters
 
 
-def train(X_train, Y_train, layer_dimensions, number_of_iterations):
+def train(X_train, Y_train, layer_dimensions, number_of_iterations,
+          print_cost):
     number_of_layers = len(layer_dimensions)
     model_parameters = initialise_model_parameters(layer_dimensions)
 
-    for _ in range(number_of_iterations):
+    for iteration in range(1, number_of_iterations + 1):
         activations = forward(X_train, model_parameters)
         cost, dYhat = compute_cost(activations['A' + str(number_of_layers - 1)],
                                    Y_train)
@@ -116,6 +118,15 @@ def train(X_train, Y_train, layer_dimensions, number_of_iterations):
         model_parameters = update_model_parameters(model_parameters,
                                                    gradients,
                                                    0.1)
+        if print_cost:
+            costs = [[], []]
+            if iteration % 100 == 0:
+                print('Cost at iteration {}: {}'.format(iteration, cost))
+                costs[0].append(iteration)
+                costs[1].append(cost)
+            if iteration == number_of_iterations - 1:
+                plt.plot(costs[0], costs[1], c='hotpink')
+                plt.show()
 
     return model_parameters
 

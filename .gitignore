@@ -1,3 +1,7 @@
+# Training and testing data
+train.csv
+test.csv
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -129,5 +133,4 @@ dmypy.json
 .pyre/
 
 # PyCharm
-
 .idea/
