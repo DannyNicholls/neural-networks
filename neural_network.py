@@ -1,7 +1,26 @@
-# None of this has been tested.
+'''
+I have used the following abbreviations which I hope makes the code easier
+to read:
+
+    W      Weights
+    b      Bias values
+    Z      Linear activations
+    A      Non-linear activations
+    Aprev  Non-linear activations of the previous layer
+    Yhat   Output layer activations
+    dW     Differential of the cost function w.r.t. the weights
+    db     Differential of the cost function w.r.t. the bias values
+    dA     Differential of the cost function w.r.t. the non-linear activations
+    dYhat  Differential of the cost function w.r.t. the output layer activation
+    dAdZ   Differential of the non-linear activations w.r.t the linear
+           activations
+
+Have a great day!
+'''
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 
 def initialise_model_parameters(layer_dimensions, seed=42):
@@ -31,18 +50,22 @@ def compute_activation(Z, activation_function):
     return A
 
 
-def forward(X, model_parameters):
+def forward(X, model_parameters, activation_functions):
     number_of_layers = (len(model_parameters) + 2) // 2
     activations = {'A0': X}
 
     for layer in range(1, number_of_layers):
+
+        # Obtain parameters required for forward propagation.
         W = model_parameters['W' + str(layer)]
-        Aprev = activations["A" + str(layer - 1)]
         b = model_parameters['b' + str(layer)]
+        Aprev = activations["A" + str(layer - 1)]
+        activation_function = activation_functions[layer]
+
+        # Compute activations.
         Z = linear_prediction(W, Aprev, b)
-        activation_function = ('sigmoid' if layer == number_of_layers - 1
-                               else 'relu')
         A = compute_activation(Z, activation_function)
+
         activations["A" + str(layer)] = A
 
     return activations
@@ -50,15 +73,22 @@ def forward(X, model_parameters):
 
 def compute_cost(Yhat, Y):
     m = Y.shape[1]
-    cost = -1/m * np.sum(Y * np.log(Yhat) + (1 - Y) * np.log(1 - Yhat))
-    dYhat = - (np.divide(Y, Yhat) - np.divide(1 - Y, 1 - Yhat))
+    zero_offset = 1e-3
+    cost = -1/m * np.sum(Y * np.log(Yhat + zero_offset)
+                         + (1 - Y) * np.log(1 - Yhat + zero_offset))
+
+    # The following assumes that the output layer is sigmoid.  Need to
+    # parameterize this.
+    dYhat = - (np.divide(Y, Yhat + zero_offset)
+               - np.divide(1 - Y, 1 - Yhat + zero_offset))
+
     return cost, dYhat
 
 
 def compute_activation_gradient(A, dA, activation_function):
     dJdA = dA
     if activation_function == 'relu':
-        dAdZ = 1 if A > 0 else 0
+        dAdZ = A > 0
     elif activation_function == 'sigmoid':
         dAdZ = (A * (1 - A))
     dZ = dAdZ * dJdA
@@ -73,17 +103,21 @@ def compute_linear_gradients(dZ, W, Aprev):
     return dW, db, dAprev
 
 
-def backward(dYhat, model_parameters, activations):
-    number_of_layers = len(activations) // 2
+def backward(dYhat, activations, model_parameters, activation_functions):
+    number_of_layers = len(activations)
     gradients = {'dA' + str(number_of_layers - 1): dYhat}
-
     for layer in reversed(range(1, number_of_layers)):
+
+        # Obtain model parameters, activations, and gradients for backward
+        # propagation.
         W = model_parameters['W' + str(layer)]
+        activation_function = activation_functions[layer]
         A = activations['A' + str(layer)]
-        activation_function = 'sigmoid' if layer == number_of_layers else 'relu'
-        dA = gradients['dA' + str(layer)]
-        dZ = compute_activation_gradient(A, dA, activation_function)
         Aprev = activations['A' + str(layer - 1)]
+        dA = gradients['dA' + str(layer)]
+
+        # Compute gradients.
+        dZ = compute_activation_gradient(A, dA, activation_function)
         dW, db, dAprev = compute_linear_gradients(dZ, W, Aprev)
 
         gradients['dW' + str(layer)] = dW
@@ -95,41 +129,116 @@ def backward(dYhat, model_parameters, activations):
 
 def update_model_parameters(model_parameters, gradients, learning_rate):
     number_of_layers = (len(model_parameters) + 2) // 2
-
     for layer in range(1, number_of_layers):
         model_parameters['W' + str(layer)] -= (learning_rate
-                                               * gradients['W' + str(layer)])
+                                               * gradients['dW' + str(layer)])
         model_parameters['b' + str(layer)] -= (learning_rate
-                                               * gradients['b' + str(layer)])
-
+                                               * gradients['db' + str(layer)])
     return model_parameters
 
 
-def train(X_train, Y_train, layer_dimensions, number_of_iterations,
-          print_cost):
+def train(X_train, Y_train,
+          layer_dimensions, activation_functions,
+          number_of_iterations, learning_rate,
+          print_cost=False, print_rate=250):
+
     number_of_layers = len(layer_dimensions)
     model_parameters = initialise_model_parameters(layer_dimensions)
 
+    # Forward and backward propagation.
+    costs = [[], []]
     for iteration in range(1, number_of_iterations + 1):
-        activations = forward(X_train, model_parameters)
-        cost, dYhat = compute_cost(activations['A' + str(number_of_layers - 1)],
-                                   Y_train)
-        gradients = backward(dYhat, model_parameters, activations)
+        activations = forward(X_train, model_parameters, activation_functions)
+        output_activations = activations['A' + str(number_of_layers - 1)]
+        cost, dYhat = compute_cost(output_activations, Y_train)
+        gradients = backward(dYhat, activations,
+                             model_parameters, activation_functions)
         model_parameters = update_model_parameters(model_parameters,
                                                    gradients,
-                                                   0.1)
+                                                   learning_rate)
+
+        # Printing and plotting cost.
         if print_cost:
-            costs = [[], []]
-            if iteration % 100 == 0:
+            costs[0].append(iteration)
+            costs[1].append(cost)
+            if iteration % print_rate == 0:
                 print('Cost at iteration {}: {}'.format(iteration, cost))
-                costs[0].append(iteration)
-                costs[1].append(cost)
             if iteration == number_of_iterations - 1:
-                plt.plot(costs[0], costs[1], c='hotpink')
-                plt.show()
+                fig, ax = plt.subplots()
+                ax.plot(costs[0], costs[1], c='hotpink')
+                ax.set_title('Model Training')
+                ax.set_ylabel('Cost')
+                ax.set_xlabel('Iteration')
+                fig.show()
 
     return model_parameters
 
 
+def test(X_test, Y_test, model_parameters, activation_functions):
+    output_layer_number = (len(model_parameters) + 2) // 2 - 1
+    activations = forward(X_test, model_parameters, activation_functions)
+    output_activations = activations['A' + str(output_layer_number)].T
+    cost, _ = compute_cost(output_activations, Y_test)
+    return output_activations, cost
+
+
+def or_gate():
+    # Y is the bitwise-or of X[0] and X[1].
+    X = np.array([[0, 1, 0, 1], [0, 0, 1, 1]])
+    Y = np.array([[0, 1, 1, 1]])
+
+    # Train a model.
+    layer_dimensions = [2, 2, 1]
+    activation_functions = [None, 'relu', 'sigmoid']
+    model_parameters = train(X, Y,
+                             layer_dimensions, activation_functions,
+                             number_of_iterations=25000, learning_rate=.05,
+                             print_cost=True, print_rate=500)
+
+    # Test the model.
+    output_activations, cost = test(X, Y,
+                                    model_parameters, activation_functions)
+
+    # Print the predicted values.
+    print('\nFour cases:')
+    for i in range(4):
+        print(X[1][i], 'or', X[0][i], '=', Y[0][i],
+              'for which the model predicts', *output_activations[i])
+
+
+def digits():
+
+    # MNIST database.
+    file_path_to_train_csv = '/Users/Danny/Documents/Python/Digits/train.csv'
+    file_path_to_test_csv = '/Users/Danny/Documents/Python/Digits/test.csv'
+    training_data = pd.read_csv(file_path_to_train_csv)
+    test_data = pd.read_csv(file_path_to_test_csv)
+
+    # Store each training example input in a separate column.
+    X_train = training_data.iloc[1:, 1:].T
+    number_of_features = len(X_train)
+    m = len(X_train.iloc[0])
+
+    # One-hot encode the training example y values and store each one-hot
+    # encoded value in a separate column.
+    Y_train = np.array([[0] * 10 for _ in range(m)]).T
+    for i in range(m):
+        Y_train[training_data.iloc[i, 0]][i] = 1
+
+    # Train a model.
+    layer_dimensions = [number_of_features]
+    activation_functions = [None]
+    model_parameters = train(X_train, Y_train,
+                             layer_dimensions, activation_functions,
+                             number_of_iterations=10000, learning_rate=0.1,
+                             print_cost=True, print_rate=50)
+
+    # Test the model.
+    X_test = test_data.iloc[1:, :].T
+    Y_test = np.array(test_data.iloc[1:, 0].values.reshape(1, 27999))
+    output_activations, cost = test(X_test, Y_test, model_parameters)
+    predictions = np.argmax(output_activations, axis=0)
+
+
 if __name__ == '__main__':
-    predictions = [1 if a > 0.5 else 0 for a in A]
+    or_gate()
