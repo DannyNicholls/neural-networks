@@ -88,16 +88,14 @@ def forward(X, model_parameters, activation_functions):
 
 
 def compute_cost(Yhat, Y):
+    """Return cross-entropy cost."""
     m = Y.shape[1]
 
     # Add an offset to ensure that we do not calculate the log of zero.
-    offset = 1e-6
-    Yhat += offset
-
-    # Cross-entropy cost function.
+    offset = 1e-3
     cost = (-1/m
-            * np.sum(np.multiply(Y, np.log(Yhat)
-                     + np.multiply((1 - Y), np.log(1 - Yhat)))))
+            * np.sum(np.multiply(Y, np.log(Yhat + offset))
+                     + np.multiply((1 - Y), np.log(1 - Yhat + offset))))
 
     return cost
 
@@ -126,15 +124,14 @@ def backward(Y, activations, model_parameters, activation_functions):
     gradients for that layer."""
     number_of_layers = len(activations)
 
-    # Add an offset to the output layer activation to ensure that we do not
-    # divide by zero.
-    Yhat = activations['A' + str(number_of_layers - 1)] + 1e-6
-
     # Calculate the derivative of the cost function with respect to the output
     # layer activation.
+    Yhat = activations['A' + str(number_of_layers - 1)]
+    offset = 1e-3
     activation_function = activation_functions[number_of_layers - 1]
     if activation_function == 'sigmoid':
-        dYhat = np.divide(1 - Y, 1 - Yhat) - np.divide(Y, Yhat)
+        dYhat = (np.divide(1 - Y, 1 - Yhat + offset)
+                 - np.divide(Y, Yhat + offset))
     else:
         pass # need to add softmax.
 
@@ -244,7 +241,7 @@ def or_gate():
     activation_functions = [None, 'sigmoid', 'sigmoid']
     model_parameters = train(X, Y,
                              layer_dimensions, activation_functions,
-                             number_of_iterations=25000, learning_rate=.05,
+                             number_of_iterations=5000, learning_rate=.05,
                              print_cost=True, print_rate=500)
 
     # Test the model.
@@ -273,9 +270,9 @@ def or_and_xor_gates():
     activation_functions = [None, 'relu', 'sigmoid']
     model_parameters = train(X, Y,
                              layer_dimensions, activation_functions,
-                             number_of_iterations=5000,
+                             number_of_iterations=100,
                              learning_rate=.005,
-                             print_cost=True, print_rate=500)
+                             print_cost=True, print_rate=100)
 
     # Test the model.
     Yhat, _ = test(X, Y, model_parameters, activation_functions)
@@ -298,31 +295,46 @@ def or_and_xor_gates():
 
 def digits():
 
-    # This is overfitting.  Will try adding regularization.
-
     # MNIST database.
     file_path_to_csv = '/Users/Danny/Documents/Python/Digits/train.csv'
     data = pd.read_csv(file_path_to_csv)
     data = data.sample(frac=1)
 
     # Store each training example input in a separate column.
-    X_train = data.iloc[1:4000, 1:].T
+    X_train = data.iloc[0:400, 1:].T
     number_of_features = len(X_train)
     m = len(X_train.iloc[0])
 
-    # One-hot encode the training example y values and store each one-hot
-    # encoded value in a separate column.
+    # In the data I am using, zeros are encoded as 10.
+    data['y'].replace(10, 0, inplace=True)
+
+    # One-hot encode the training example y values.
     Y_train = np.array([[0] * 10 for _ in range(m)]).T
     for i in range(m):
-        Y_train[data.iloc[i, 0] - 1][i] = 1
+        Y_train[data.iloc[i, 0]][i] = 1
+
+    # Plot some examples from the training set.
+    plt.figure()
+    for i in range(1, 10):
+        example_X = np.array(X_train.iloc[:, i])
+        example_y = data.iloc[i, 0]
+        plt.subplot(3, 3, i)
+        plt.imshow(example_X.reshape(20, 20).T)
+        plt.title(data.iloc[i, 0])
+        plt.yticks([])
+        plt.xticks([])
+        plt.xlabel(''.join([str(num) for num in Y_train[:, i]]))
+    plt.suptitle('Some examples from the training set', fontsize=16)
+    plt.subplots_adjust(hspace=0.7)
 
     # Train a model.
     layer_dimensions = [number_of_features, 25, 10]
     activation_functions = [None, 'relu', 'sigmoid']
+    np.seterr(all='raise')
     model_parameters = train(X_train, Y_train,
                              layer_dimensions, activation_functions,
-                             number_of_iterations=500, learning_rate=0.1,
-                             print_cost=True, print_rate=200)
+                             number_of_iterations=100, learning_rate=0.1,
+                             print_cost=True, print_rate=1)
 
     # Test the model.
     X_test = data.iloc[1:4000, 1:].T
@@ -340,4 +352,4 @@ def digits():
 
 
 if __name__ == '__main__':
-    or_gate()
+    or_and_xor_gates()
