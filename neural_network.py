@@ -65,7 +65,7 @@ def compute_activation(Z, activation_function):
 
 def forward(X, model_parameters, activation_functions):
     """Return a dictionary of activation values.  For each layer, l, greater
-    than 1, the dictionary inlcudes a key, Al, to numpy array storing the
+    than 1, the dictionary inlcudes a key, Al, to a numpy array storing the
     activations for that layer."""
     number_of_layers = (len(model_parameters) + 2) // 2
     activations = {'A0': X}
@@ -120,7 +120,7 @@ def compute_linear_gradients(dZ, W, Aprev):
 
 def backward(Y, activations, model_parameters, activation_functions):
     """Return a dictionary of gradients.  For each layer, l, greater than 1,
-    the dictionary inlcudes key, dWl, db, dA, to numpy arrays storing the
+    the dictionary inlcudes keys, dWl, db, dA, to numpy arrays storing the
     gradients for that layer."""
     number_of_layers = len(activations)
 
@@ -128,12 +128,8 @@ def backward(Y, activations, model_parameters, activation_functions):
     # layer activation.
     Yhat = activations['A' + str(number_of_layers - 1)]
     offset = 1e-3
-    activation_function = activation_functions[number_of_layers - 1]
-    if activation_function == 'sigmoid':
-        dYhat = (np.divide(1 - Y, 1 - Yhat + offset)
-                 - np.divide(Y, Yhat + offset))
-    else:
-        pass # need to add softmax.
+    dYhat = (np.divide(1 - Y, 1 - Yhat + offset)
+             - np.divide(Y, Yhat + offset))
 
     gradients = {'dA' + str(number_of_layers - 1): dYhat}
 
@@ -163,10 +159,12 @@ def backward(Y, activations, model_parameters, activation_functions):
 def update_model_parameters(model_parameters, gradients, learning_rate):
     number_of_layers = (len(model_parameters) + 2) // 2
     for layer in range(1, number_of_layers):
-        model_parameters['W' + str(layer)] -= (learning_rate
-                                               * gradients['dW' + str(layer)])
-        model_parameters['b' + str(layer)] -= (learning_rate
-                                               * gradients['db' + str(layer)])
+        dW = gradients['dW' + str(layer)]
+        db = gradients['db' + str(layer)]
+
+        model_parameters['W' + str(layer)] -= learning_rate * dW
+        model_parameters['b' + str(layer)] -= learning_rate * db
+
     return model_parameters
 
 
@@ -241,7 +239,7 @@ def or_gate():
     activation_functions = [None, 'sigmoid', 'sigmoid']
     model_parameters = train(X, Y,
                              layer_dimensions, activation_functions,
-                             number_of_iterations=5000, learning_rate=.05,
+                             number_of_iterations=5000, learning_rate=.1,
                              print_cost=True, print_rate=500)
 
     # Test the model.
@@ -270,9 +268,9 @@ def or_and_xor_gates():
     activation_functions = [None, 'relu', 'sigmoid']
     model_parameters = train(X, Y,
                              layer_dimensions, activation_functions,
-                             number_of_iterations=100,
-                             learning_rate=.005,
-                             print_cost=True, print_rate=100)
+                             number_of_iterations=200,
+                             learning_rate=.1,
+                             print_cost=True, print_rate=10)
 
     # Test the model.
     Yhat, _ = test(X, Y, model_parameters, activation_functions)
@@ -295,20 +293,21 @@ def or_and_xor_gates():
 
 def digits():
 
-    # MNIST database.
+    # 5000 20 x 20 pixel grayscale digits represented as (1, 400) vectors
     file_path_to_csv = '/Users/Danny/Documents/Python/Digits/train.csv'
     data = pd.read_csv(file_path_to_csv)
     data = data.sample(frac=1)
 
+    # In the data I am using, zeros are encoded as 10.  Swap for 0.
+    data['y'].replace(10, 0, inplace=True)
+
     # Store each training example input in a separate column.
-    X_train = data.iloc[0:400, 1:].T
+    X_train = data.iloc[0:4000, 1:].T
     number_of_features = len(X_train)
     m = len(X_train.iloc[0])
 
-    # In the data I am using, zeros are encoded as 10.
-    data['y'].replace(10, 0, inplace=True)
-
-    # One-hot encode the training example y values.
+    # One-hot encode the training example y values and store each example in
+    # a separate column.
     Y_train = np.array([[0] * 10 for _ in range(m)]).T
     for i in range(m):
         Y_train[data.iloc[i, 0]][i] = 1
@@ -328,28 +327,28 @@ def digits():
     plt.subplots_adjust(hspace=0.7)
 
     # Train a model.
-    layer_dimensions = [number_of_features, 25, 10]
+    layer_dimensions = [number_of_features, 30, 10]
     activation_functions = [None, 'relu', 'sigmoid']
-    np.seterr(all='raise')
     model_parameters = train(X_train, Y_train,
                              layer_dimensions, activation_functions,
-                             number_of_iterations=100, learning_rate=0.1,
-                             print_cost=True, print_rate=1)
+                             number_of_iterations=2000, learning_rate=0.1,
+                             print_cost=True, print_rate=100)
 
     # Test the model.
-    X_test = data.iloc[1:4000, 1:].T
-    Y_test = np.array([data.iloc[1:4000, 0]])
-    Y_test -= 1
+    X_test = data.iloc[4000:5000, 1:].T
+    Y_test = np.array([data.iloc[4000:, 0]])
 
-    output_activations, cost = test(X_test, Y_test,
-                                    model_parameters, activation_functions)
+    Yhat, cost = test(X_test, Y_test,
+                      model_parameters, activation_functions)
 
-    predictions = np.argmax(output_activations, axis=0)
+    predictions = np.argmax(Yhat, axis=0)
 
     correct = np.sum(predictions == Y_test)
     incorrect = np.sum(predictions != Y_test)
     percent_correct = correct / (correct + incorrect) * 100
 
+    print(correct, incorrect, percent_correct)
+
 
 if __name__ == '__main__':
-    or_and_xor_gates()
+    digits()
