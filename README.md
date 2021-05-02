@@ -5,7 +5,7 @@ tree outside my window.  In doing so I hope to learn about neural networks,
 Python, and Git.
 
 To test the current code I have trained small networks to predict the output of
-an or gate, and it worked.
+logic gates and to predict the value of a handwritten digits.
 
 I have used the following abbreviations which I hope makes the code easier
 to read:
@@ -23,9 +23,7 @@ to read:
     dAdZ   Differential of the non-linear activations w.r.t the linear
            activations
 
-My next steps will be to introduce more hyperparameters and to train on more 
-complex data.  I have started developing a digit method below for training a 
-model to recognise hand-written digits.
+My next steps will be to introduce more hyperparameters.
 
 Have a great day!
 
