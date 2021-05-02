@@ -5,7 +5,7 @@ tree outside my window.  In doing so I hope to learn about neural networks,
 Python, and Git.
 
 To test the current code I have trained small networks to predict the output of
-logic gates and to predict the value of a handwritten digits.
+logic gates and to predict the values of a handwritten digit.
 
 I have used the following abbreviations which I hope makes the code easier
 to read:
