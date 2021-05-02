@@ -60,12 +60,22 @@ def compute_activation(Z, activation_function):
     elif activation_function == 'sigmoid':
         A = 1 / (1 + np.exp(-Z))
 
+    elif activation_function == 'softmax':
+        # Shift the max value to zero, and shift all other values the same
+        # amount.  As a result, all values other than the max will have
+        # negative values in the exponent.  This can be done because
+        # multiplying the numerator and denominator by e**shift will not
+        # change the result.
+        shifted_Z = Z - np.amax(Z, axis=0)
+        exp_shifted_Z = np.exp(shifted_Z)
+        A = exp_shifted_Z / np.sum(exp_shifted_Z, axis=0)
+
     return A
 
 
 def forward(X, model_parameters, activation_functions):
     """Return a dictionary of activation values.  For each layer, l, greater
-    than 1, the dictionary inlcudes a key, Al, to a numpy array storing the
+    than 1, the dictionary includes a key, Al, to a numpy array storing the
     activations for that layer."""
     number_of_layers = (len(model_parameters) + 2) // 2
     activations = {'A0': X}
@@ -87,26 +97,47 @@ def forward(X, model_parameters, activation_functions):
     return activations
 
 
-def compute_cost(Yhat, Y):
+def compute_cost(Yhat, Y, output_activation_function):
     """Return cross-entropy cost."""
     m = Y.shape[1]
 
-    # Add an offset to ensure that we do not calculate the log of zero.
+    # Use an offset to ensure that we do not calculate the log of zero.
     offset = 1e-3
-    cost = (-1/m
-            * np.sum(np.multiply(Y, np.log(Yhat + offset))
-                     + np.multiply((1 - Y), np.log(1 - Yhat + offset))))
+
+    if output_activation_function == 'softmax':
+        # Only y == 1 needs to be considered because maximising the
+        # corresponding output value necessitates the minimisation of the
+        # other output values.
+        cost = -1/m * np.sum(np.multiply(Y, np.log(Yhat + offset)))
+
+    else:
+        cost = (-1/m
+                * np.sum(np.multiply(Y, np.log(Yhat + offset))
+                         + np.multiply((1 - Y), np.log(1 - Yhat + offset))))
 
     return cost
 
 
 def compute_activation_gradient(A, dA, activation_function):
     dJdA = dA
+
     if activation_function == 'relu':
         dAdZ = A > 0
+
     elif activation_function == 'sigmoid':
-        dAdZ = (A * (1 - A))
+        dAdZ = A * (1 - A)
+
+    elif activation_function == 'softmax':
+        # The activation value of a given node depends on the activation
+        # value of each other node.  Therefore, for each example, dAdZ is a
+        # matrix:
+        dAdZ = [np.diag(A[:, i]) - np.outer(A[:, i], A[:, i])
+                for i in range(len(A))]
+        # I need to think about this more, but for now this can be shorted in
+        # the output layer because dZ = Yhat - Y.
+
     dZ = dAdZ * dJdA
+
     return dZ
 
 
@@ -125,11 +156,17 @@ def backward(Y, activations, model_parameters, activation_functions):
     number_of_layers = len(activations)
 
     # Calculate the derivative of the cost function with respect to the output
-    # layer activation.
+    # layer activation.  Note that the code doesn't actually use this
+    # result.
+    output_activation_function = activation_functions[number_of_layers - 1]
     Yhat = activations['A' + str(number_of_layers - 1)]
     offset = 1e-3
-    dYhat = (np.divide(1 - Y, 1 - Yhat + offset)
-             - np.divide(Y, Yhat + offset))
+
+    if output_activation_function == 'softmax':
+        dYhat = - np.divide(Y, Yhat + offset)
+    else:
+        dYhat = (np.divide(1 - Y, 1 - Yhat + offset)
+                 - np.divide(Y, Yhat + offset))
 
     gradients = {'dA' + str(number_of_layers - 1): dYhat}
 
@@ -146,7 +183,10 @@ def backward(Y, activations, model_parameters, activation_functions):
         dA = gradients['dA' + str(layer)]
 
         # Compute the gradients.
-        dZ = compute_activation_gradient(A, dA, activation_function)
+        if layer == number_of_layers - 1:
+            dZ = Yhat - Y
+        else:
+            dZ = compute_activation_gradient(A, dA, activation_function)
         dW, db, dAprev = compute_linear_gradients(dZ, W, Aprev)
 
         gradients['dW' + str(layer)] = dW
@@ -191,7 +231,8 @@ def train(X_train, Y_train,
         activations = forward(X_train,
                               model_parameters, activation_functions)
         Yhat = activations['A' + str(number_of_layers - 1)]
-        cost = compute_cost(Yhat, Y_train)
+        output_activation_function = activation_functions[number_of_layers - 1]
+        cost = compute_cost(Yhat, Y_train, output_activation_function)
 
         # Backward.
         gradients = backward(Y_train, activations,
@@ -220,8 +261,9 @@ def train(X_train, Y_train,
 def test(X_test, Y_test, model_parameters, activation_functions):
     output_layer_number = (len(model_parameters) + 2) // 2 - 1
     activations = forward(X_test, model_parameters, activation_functions)
+    output_activation_function = activation_functions[output_layer_number]
     Yhat = activations['A' + str(output_layer_number)]
-    cost = compute_cost(Yhat, Y_test)
+    cost = compute_cost(Yhat, Y_test, output_activation_function)
     return Yhat, cost
 
 
@@ -255,7 +297,7 @@ def or_gate():
 def or_and_xor_gates():
     """
     Train a neural network to predict the output of OR, AND, and XOR gates.
-    This is useful for testing code for multi-class classification.
+    This is useful for testing code for multi-label classification.
     """
     X = np.array([[0, 1, 0, 1],
                   [0, 0, 1, 1]])
@@ -319,7 +361,7 @@ def digits():
         example_y = data.iloc[i, 0]
         plt.subplot(3, 3, i)
         plt.imshow(example_X.reshape(20, 20).T)
-        plt.title(data.iloc[i, 0])
+        plt.title(example_y)
         plt.yticks([])
         plt.xticks([])
         plt.xlabel(''.join([str(num) for num in Y_train[:, i]]))
@@ -328,10 +370,10 @@ def digits():
 
     # Train a model.
     layer_dimensions = [number_of_features, 30, 10]
-    activation_functions = [None, 'relu', 'sigmoid']
+    activation_functions = [None, 'relu', 'softmax']
     model_parameters = train(X_train, Y_train,
                              layer_dimensions, activation_functions,
-                             number_of_iterations=2000, learning_rate=0.1,
+                             number_of_iterations=10000, learning_rate=0.1,
                              print_cost=True, print_rate=100)
 
     # Test the model.
