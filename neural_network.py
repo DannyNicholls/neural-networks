@@ -400,9 +400,12 @@ def digits():
 
     correct = np.sum(predictions == data.iloc[:4000, 0])
     incorrect = np.sum(predictions != data.iloc[:4000, 0])
-    percent_correct = correct / (correct + incorrect) * 100
+    accuracy = correct / (correct + incorrect) * 100
 
-    print('Training data:', correct, incorrect, percent_correct)
+    print('\nTraining data')
+    print(correct, 'correct predictions and',
+          incorrect, 'incorrect predictions')
+    print('Accuracy on training data:', accuracy, '%')
 
     # Validate the model.
     X_validate = data.iloc[4000:, 1:].T
@@ -415,9 +418,12 @@ def digits():
 
     correct = np.sum(predictions == Y_validate)
     incorrect = np.sum(predictions != Y_validate)
-    percent_correct = correct / (correct + incorrect) * 100
+    accuracy = correct / (correct + incorrect) * 100
 
-    print('Validation data:', correct, incorrect, percent_correct)
+    print('\nValidation data')
+    print(correct, 'correct predictions and',
+          incorrect, 'incorrect predictions')
+    print('Accuracy on validation data:', accuracy, '%')
 
 
 
