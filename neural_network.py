@@ -27,7 +27,9 @@ import numpy as np
 import pandas as pd
 
 
-def initialise_model_parameters(layer_dimensions, seed=42):
+def initialise_model_parameters(layer_dimensions,
+                                activation_functions,
+                                seed=42):
     """Return a dictionary of random weight values.  For each layer, l,
     greater than 1, the returned dictionary includes a key, Wl, to a numpy
     array storing weights for that layer, and a key, bl, to a numpy array
@@ -39,8 +41,13 @@ def initialise_model_parameters(layer_dimensions, seed=42):
         number_of_inputs = layer_dimensions[layer - 1]
         number_of_nodes = layer_dimensions[layer]
 
-        W = np.random.randn(number_of_inputs, number_of_nodes)
-        b = np.random.randn(number_of_nodes, 1)
+        if activation_functions[layer] == 'Relu':
+            scale = np.sqrt(2 / layer_dimensions[layer - 1])
+        else:
+            scale = np.sqrt(1 / layer_dimensions[layer - 1])
+
+        W = np.random.randn(number_of_inputs, number_of_nodes) * scale
+        b = np.zeros((number_of_nodes, 1))
 
         model_parameters["W" + str(layer)] = W
         model_parameters["b" + str(layer)] = b
@@ -221,7 +228,8 @@ def train(X_train, Y_train,
     assert len(X_train) == layer_dimensions[0]
 
     number_of_layers = len(layer_dimensions)
-    model_parameters = initialise_model_parameters(layer_dimensions)
+    model_parameters = initialise_model_parameters(layer_dimensions,
+                                                   activation_functions)
 
     # Forward and backward propagation.
     costs = [[], []]
@@ -265,6 +273,14 @@ def test(X_test, Y_test, model_parameters, activation_functions):
     Yhat = activations['A' + str(output_layer_number)]
     cost = compute_cost(Yhat, Y_test, output_activation_function)
     return Yhat, cost
+
+
+def train_test_split(X, Y, train=60, develop=20, test=False):
+    '''
+    If train error much higher than expected: high bias (under fit)
+    If development error > training error: high variance (over fit)
+    '''
+    return train_X, train_Y, develop_X, develop_Y, test_X, test_Y
 
 
 def or_gate():
@@ -344,7 +360,7 @@ def digits():
     data['y'].replace(10, 0, inplace=True)
 
     # Store each training example input in a separate column.
-    X_train = data.iloc[0:4000, 1:].T
+    X_train = data.iloc[:4000, 1:].T
     number_of_features = len(X_train)
     m = len(X_train.iloc[0])
 
@@ -373,23 +389,36 @@ def digits():
     activation_functions = [None, 'relu', 'softmax']
     model_parameters = train(X_train, Y_train,
                              layer_dimensions, activation_functions,
-                             number_of_iterations=10000, learning_rate=0.1,
+                             number_of_iterations=1000, learning_rate=0.1,
                              print_cost=True, print_rate=100)
 
-    # Test the model.
-    X_test = data.iloc[4000:5000, 1:].T
-    Y_test = np.array([data.iloc[4000:, 0]])
-
-    Yhat, cost = test(X_test, Y_test,
+    # Check how well the model performs on the training data.
+    Yhat, cost = test(X_train, Y_train,
                       model_parameters, activation_functions)
 
     predictions = np.argmax(Yhat, axis=0)
 
-    correct = np.sum(predictions == Y_test)
-    incorrect = np.sum(predictions != Y_test)
+    correct = np.sum(predictions == data.iloc[:4000, 0])
+    incorrect = np.sum(predictions != data.iloc[:4000, 0])
     percent_correct = correct / (correct + incorrect) * 100
 
-    print(correct, incorrect, percent_correct)
+    print('Training data:', correct, incorrect, percent_correct)
+
+    # Validate the model.
+    X_validate = data.iloc[4000:, 1:].T
+    Y_validate = np.array([data.iloc[4000:, 0]])
+
+    Yhat, cost = test(X_validate, Y_validate,
+                      model_parameters, activation_functions)
+
+    predictions = np.argmax(Yhat, axis=0)
+
+    correct = np.sum(predictions == Y_validate)
+    incorrect = np.sum(predictions != Y_validate)
+    percent_correct = correct / (correct + incorrect) * 100
+
+    print('Validation data:', correct, incorrect, percent_correct)
+
 
 
 if __name__ == '__main__':
