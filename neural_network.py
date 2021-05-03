@@ -111,7 +111,10 @@ def compute_cost(Yhat, Y,
     m = Y.shape[1]
 
     # Use an offset to ensure that we do not calculate the log of zero.
-    offset = 1e-3
+
+    # CHANGE TO MASK
+
+    offset = 1e-6
 
     if output_activation_function == 'softmax':
         # Only y == 1 needs to be considered because maximising the
@@ -448,18 +451,3 @@ def digits():
 
 if __name__ == '__main__':
     digits()
-
-# 0:    0.923
-# 0.7:  0.932
-# 1.5:  0.935
-# 4:    0.941
-# 7:    0.45
-# 8:    0.946
-# 9:    0.946
-# 10:   0.945
-# 12:   0.943
-# 15:   0.94
-# 20:   0.935
-# 30:   0.934
-# 50:   0.919
-
