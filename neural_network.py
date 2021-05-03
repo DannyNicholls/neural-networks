@@ -104,8 +104,10 @@ def forward(X, model_parameters, activation_functions):
     return activations
 
 
-def compute_cost(Yhat, Y, output_activation_function):
-    """Return cross-entropy cost."""
+def compute_cost(Yhat, Y,
+                 output_activation_function,
+                 L2=False, lambd=0.5, model_parameters=None):
+
     m = Y.shape[1]
 
     # Use an offset to ensure that we do not calculate the log of zero.
@@ -121,6 +123,13 @@ def compute_cost(Yhat, Y, output_activation_function):
         cost = (-1/m
                 * np.sum(np.multiply(Y, np.log(Yhat + offset))
                          + np.multiply((1 - Y), np.log(1 - Yhat + offset))))
+
+    # L2 regularization.
+    if L2:
+        number_of_layers = (len(model_parameters) + 2) // 2
+        for layer in range(1, number_of_layers):
+            W = model_parameters['W' + str(layer)]
+            cost += (1 / m) * (lambd / 2) * np.sum(np.square(W))
 
     return cost
 
@@ -139,7 +148,7 @@ def compute_activation_gradient(A, dA, activation_function):
         # value of each other node.  Therefore, for each example, dAdZ is a
         # matrix:
         dAdZ = [np.diag(A[:, i]) - np.outer(A[:, i], A[:, i])
-                for i in range(len(A))]
+                for i in range(len(A[0]))]
         # I need to think about this more, but for now this can be shorted in
         # the output layer because dZ = Yhat - Y.
 
@@ -148,15 +157,20 @@ def compute_activation_gradient(A, dA, activation_function):
     return dZ
 
 
-def compute_linear_gradients(dZ, W, Aprev):
+def compute_linear_gradients(dZ, W, Aprev, L2=False, lambd=0.5):
     m = dZ.shape[1]
-    dW = 1/m * np.dot(Aprev, dZ.T)
+    if L2:
+        dW = 1/m * np.dot(Aprev, dZ.T) + ((lambd / m) * W)
+    else:
+        dW = 1/m * np.dot(Aprev, dZ.T)
     db = 1/m * np.sum(dZ, axis=1, keepdims=True)
     dAprev = np.dot(W, dZ)
     return dW, db, dAprev
 
 
-def backward(Y, activations, model_parameters, activation_functions):
+def backward(Y, activations,
+             model_parameters, activation_functions,
+             L2=False, lambd=0.5):
     """Return a dictionary of gradients.  For each layer, l, greater than 1,
     the dictionary inlcudes keys, dWl, db, dA, to numpy arrays storing the
     gradients for that layer."""
@@ -194,7 +208,8 @@ def backward(Y, activations, model_parameters, activation_functions):
             dZ = Yhat - Y
         else:
             dZ = compute_activation_gradient(A, dA, activation_function)
-        dW, db, dAprev = compute_linear_gradients(dZ, W, Aprev)
+
+        dW, db, dAprev = compute_linear_gradients(dZ, W, Aprev, L2, lambd)
 
         gradients['dW' + str(layer)] = dW
         gradients['db' + str(layer)] = db
@@ -217,7 +232,8 @@ def update_model_parameters(model_parameters, gradients, learning_rate):
 
 def train(X_train, Y_train,
           layer_dimensions, activation_functions,
-          number_of_iterations, learning_rate,
+          L2=False, lambd=0.5,
+          number_of_iterations=1000, learning_rate=0.1,
           print_cost=False, print_rate=250):
 
     # Some simple error checking to be expanded upon at a later date.  Could
@@ -240,11 +256,14 @@ def train(X_train, Y_train,
                               model_parameters, activation_functions)
         Yhat = activations['A' + str(number_of_layers - 1)]
         output_activation_function = activation_functions[number_of_layers - 1]
-        cost = compute_cost(Yhat, Y_train, output_activation_function)
+        cost = compute_cost(Yhat, Y_train,
+                            output_activation_function,
+                            L2, lambd, model_parameters)
 
         # Backward.
         gradients = backward(Y_train, activations,
-                             model_parameters, activation_functions)
+                             model_parameters, activation_functions,
+                             L2, lambd)
         model_parameters = update_model_parameters(model_parameters,
                                                    gradients,
                                                    learning_rate)
@@ -354,7 +373,7 @@ def digits():
     # 5000 20 x 20 pixel grayscale digits represented as (1, 400) vectors
     file_path_to_csv = '/Users/Danny/Documents/Python/Digits/train.csv'
     data = pd.read_csv(file_path_to_csv)
-    data = data.sample(frac=1)
+    data = data.sample(frac=1, random_state=42)
 
     # In the data I am using, zeros are encoded as 10.  Swap for 0.
     data['y'].replace(10, 0, inplace=True)
@@ -389,7 +408,8 @@ def digits():
     activation_functions = [None, 'relu', 'softmax']
     model_parameters = train(X_train, Y_train,
                              layer_dimensions, activation_functions,
-                             number_of_iterations=1000, learning_rate=0.1,
+                             L2=True, lambd=8,
+                             number_of_iterations=30000, learning_rate=0.3,
                              print_cost=True, print_rate=100)
 
     # Check how well the model performs on the training data.
@@ -400,12 +420,12 @@ def digits():
 
     correct = np.sum(predictions == data.iloc[:4000, 0])
     incorrect = np.sum(predictions != data.iloc[:4000, 0])
-    accuracy = correct / (correct + incorrect) * 100
+    accuracy = correct / (correct + incorrect)
 
     print('\nTraining data')
     print(correct, 'correct predictions and',
           incorrect, 'incorrect predictions')
-    print('Accuracy on training data:', accuracy, '%')
+    print('Accuracy on training data:', accuracy)
 
     # Validate the model.
     X_validate = data.iloc[4000:, 1:].T
@@ -418,14 +438,28 @@ def digits():
 
     correct = np.sum(predictions == Y_validate)
     incorrect = np.sum(predictions != Y_validate)
-    accuracy = correct / (correct + incorrect) * 100
+    accuracy = correct / (correct + incorrect)
 
     print('\nValidation data')
     print(correct, 'correct predictions and',
           incorrect, 'incorrect predictions')
-    print('Accuracy on validation data:', accuracy, '%')
-
+    print('Accuracy on validation data:', accuracy)
 
 
 if __name__ == '__main__':
     digits()
+
+# 0:    0.923
+# 0.7:  0.932
+# 1.5:  0.935
+# 4:    0.941
+# 7:    0.45
+# 8:    0.946
+# 9:    0.946
+# 10:   0.945
+# 12:   0.943
+# 15:   0.94
+# 20:   0.935
+# 30:   0.934
+# 50:   0.919
+
