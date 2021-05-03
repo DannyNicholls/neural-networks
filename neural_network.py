@@ -114,15 +114,15 @@ def compute_cost(Yhat, Y,
         # Only y == 1 needs to be considered because maximising the
         # corresponding output value necessitates the minimisation of the
         # other output values.
-        cost = -1/m * np.sum(np.multiply(Y, np.log(Yhat).filled(0)))
+        cost = -1/m * np.sum(np.multiply(Y, np.ma.log(Yhat).filled(0)))
 
     else:
         # cost = (-1/m
         #         * np.sum(np.multiply(Y, np.log(Yhat + offset))
         #                  + np.multiply((1 - Y), np.log(1 - Yhat + offset))))
         cost = (-1/m
-                * np.sum(np.multiply(Y, np.log(Yhat).filled(0))
-                         + np.multiply((1 - Y), np.log(1 - Yhat).filled(0))))
+                * np.sum(np.multiply(Y, np.ma.log(Yhat).filled(0))
+                         + np.multiply((1 - Y), np.ma.log(1 - Yhat).filled(0))))
 
     # L2 regularization.
     if L2:
