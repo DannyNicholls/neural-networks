@@ -110,22 +110,19 @@ def compute_cost(Yhat, Y,
 
     m = Y.shape[1]
 
-    # Use an offset to ensure that we do not calculate the log of zero.
-
-    # CHANGE TO MASK
-
-    offset = 1e-6
-
     if output_activation_function == 'softmax':
         # Only y == 1 needs to be considered because maximising the
         # corresponding output value necessitates the minimisation of the
         # other output values.
-        cost = -1/m * np.sum(np.multiply(Y, np.log(Yhat + offset)))
+        cost = -1/m * np.sum(np.multiply(Y, np.log(Yhat).filled(0)))
 
     else:
+        # cost = (-1/m
+        #         * np.sum(np.multiply(Y, np.log(Yhat + offset))
+        #                  + np.multiply((1 - Y), np.log(1 - Yhat + offset))))
         cost = (-1/m
-                * np.sum(np.multiply(Y, np.log(Yhat + offset))
-                         + np.multiply((1 - Y), np.log(1 - Yhat + offset))))
+                * np.sum(np.multiply(Y, np.log(Yhat).filled(0))
+                         + np.multiply((1 - Y), np.log(1 - Yhat).filled(0))))
 
     # L2 regularization.
     if L2:
@@ -411,8 +408,8 @@ def digits():
     activation_functions = [None, 'relu', 'softmax']
     model_parameters = train(X_train, Y_train,
                              layer_dimensions, activation_functions,
-                             L2=True, lambd=8,
-                             number_of_iterations=30000, learning_rate=0.3,
+                             L2=False, lambd=8,
+                             number_of_iterations=1000, learning_rate=0.3,
                              print_cost=True, print_rate=100)
 
     # Check how well the model performs on the training data.
