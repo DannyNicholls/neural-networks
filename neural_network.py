@@ -2,7 +2,7 @@
 I have used the following abbreviations which I hope makes the code easier
 to read:
 
-    m      Number of examples in a
+    m      Number of examples in a given matrix
     W      Weights
     b      Bias values
     Z      Linear activations
