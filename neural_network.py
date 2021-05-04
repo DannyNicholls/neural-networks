@@ -2,6 +2,7 @@
 I have used the following abbreviations which I hope makes the code easier
 to read:
 
+    m      Number of examples in a
     W      Weights
     b      Bias values
     Z      Linear activations
@@ -30,22 +31,34 @@ import pandas as pd
 def initialise_model_parameters(layer_dimensions,
                                 activation_functions,
                                 seed=42):
-    """Return a dictionary of random weight values.  For each layer, l,
+    """
+    Return a dictionary of random weight values.  For each layer, l,
     greater than 1, the returned dictionary includes a key, Wl, to a numpy
     array storing weights for that layer, and a key, bl, to a numpy array
-    storing a bias vector for that layer."""
+    storing a bias vector for that layer.
+    """
+
     np.random.seed(seed)
+
     number_of_layers = len(layer_dimensions)
     model_parameters = {}
+
     for layer in range(1, number_of_layers):
+
+        # Determine the properties of the layer necessary to initialise model
+        # parameters for that layer.
         number_of_inputs = layer_dimensions[layer - 1]
         number_of_nodes = layer_dimensions[layer]
 
+        # Determine a scaling factor for the layer.
         if activation_functions[layer] == 'Relu':
+            # He scaling.
             scale = np.sqrt(2 / layer_dimensions[layer - 1])
         else:
+            # Xavier scaling.
             scale = np.sqrt(1 / layer_dimensions[layer - 1])
 
+        # Initialise the weight and bias model parameters for the layer.
         W = np.random.randn(number_of_inputs, number_of_nodes) * scale
         b = np.zeros((number_of_nodes, 1))
 
@@ -81,9 +94,12 @@ def compute_activation(Z, activation_function):
 
 
 def forward(X, model_parameters, activation_functions):
-    """Return a dictionary of activation values.  For each layer, l, greater
+    """
+    Return a dictionary of activation values.  For each layer, l, greater
     than 1, the dictionary includes a key, Al, to a numpy array storing the
-    activations for that layer."""
+    activations for that layer.
+    """
+
     number_of_layers = (len(model_parameters) + 2) // 2
     activations = {'A0': X}
 
@@ -114,15 +130,12 @@ def compute_cost(Yhat, Y,
         # Only y == 1 needs to be considered because maximising the
         # corresponding output value necessitates the minimisation of the
         # other output values.
-        cost = -1/m * np.sum(np.multiply(Y, np.ma.log(Yhat).filled(0)))
-
+        ones_loss = np.multiply(Y, np.ma.log(Yhat).filled(1e10))
+        cost = -1/m * np.sum(ones_loss)
     else:
-        # cost = (-1/m
-        #         * np.sum(np.multiply(Y, np.log(Yhat + offset))
-        #                  + np.multiply((1 - Y), np.log(1 - Yhat + offset))))
-        cost = (-1/m
-                * np.sum(np.multiply(Y, np.ma.log(Yhat).filled(0))
-                         + np.multiply((1 - Y), np.ma.log(1 - Yhat).filled(0))))
+        ones_loss = np.multiply(Y, np.ma.log(Yhat).filled(1e10))
+        zeros_loss = np.multiply((1 - Y), np.ma.log(1 - Yhat).filled(1e10))
+        cost = -1/m * np.sum(ones_loss + zeros_loss)
 
     # L2 regularization.
     if L2:
@@ -135,6 +148,11 @@ def compute_cost(Yhat, Y,
 
 
 def compute_activation_gradient(A, dA, activation_function):
+    """
+    Return the differential of the cost function with respect to the linear
+    activation of a single layer.
+    """
+
     dJdA = dA
 
     if activation_function == 'relu':
@@ -149,31 +167,49 @@ def compute_activation_gradient(A, dA, activation_function):
         # matrix:
         dAdZ = [np.diag(A[:, i]) - np.outer(A[:, i], A[:, i])
                 for i in range(len(A[0]))]
-        # I need to think about this more, but for now this can be shorted in
-        # the output layer because dZ = Yhat - Y.
+        # I need to think about this more, but for now I only use this in
+        # the output layer for which dZ = Yhat - Y.
 
     dZ = dAdZ * dJdA
 
     return dZ
 
 
-def compute_linear_gradients(dZ, W, Aprev, L2=False, lambd=0.5):
+def compute_linear_gradients(dZ, W, Aprev,
+                             L2=False, lambd=0.5):
+    """
+    Return the differential of the cost function with respect to the
+    weights, bias, and inputs of a single layer.
+    """
+
     m = dZ.shape[1]
+
+    # Differential of the cost function with respect to the weights.  These
+    # values depends on whether L2 regularization is being used.
     if L2:
         dW = 1/m * np.dot(Aprev, dZ.T) + ((lambd / m) * W)
     else:
         dW = 1/m * np.dot(Aprev, dZ.T)
+
+    # Differential of the cost function with respect to the bias values.
     db = 1/m * np.sum(dZ, axis=1, keepdims=True)
+
+    # Differential of the cost function with respect to the activations of
+    # the previous layer.
     dAprev = np.dot(W, dZ)
+
     return dW, db, dAprev
 
 
 def backward(Y, activations,
              model_parameters, activation_functions,
              L2=False, lambd=0.5):
-    """Return a dictionary of gradients.  For each layer, l, greater than 1,
-    the dictionary inlcudes keys, dWl, db, dA, to numpy arrays storing the
-    gradients for that layer."""
+    """
+    Return a dictionary of gradients.  For each layer, l, greater than 1,
+    the dictionary includes keys, dWl, db, dA, to numpy arrays storing the
+    gradients for that layer.
+    """
+
     number_of_layers = len(activations)
 
     # Calculate the derivative of the cost function with respect to the output
@@ -219,7 +255,9 @@ def backward(Y, activations,
 
 
 def update_model_parameters(model_parameters, gradients, learning_rate):
+
     number_of_layers = (len(model_parameters) + 2) // 2
+
     for layer in range(1, number_of_layers):
         dW = gradients['dW' + str(layer)]
         db = gradients['db' + str(layer)]
@@ -286,11 +324,18 @@ def train(X_train, Y_train,
 
 
 def test(X_test, Y_test, model_parameters, activation_functions):
-    output_layer_number = (len(model_parameters) + 2) // 2 - 1
+
+    # Compute the activation values for the given test set.
     activations = forward(X_test, model_parameters, activation_functions)
+
+    # Identify the output activation value and the activation function used.
+    output_layer_number = (len(model_parameters) + 2) // 2 - 1
     output_activation_function = activation_functions[output_layer_number]
     Yhat = activations['A' + str(output_layer_number)]
+
+    # Compute the cost.
     cost = compute_cost(Yhat, Y_test, output_activation_function)
+
     return Yhat, cost
 
 
@@ -307,6 +352,8 @@ def or_gate():
     Train a neural network to predict the output of an OR gate.  This is
     useful for testing code for a single classification.
     """
+
+    # Training data.
     X = np.array([[0, 1, 0, 1],
                   [0, 0, 1, 1]])
     Y = np.array([[0, 1, 1, 1]])    # X[0] bitwise-OR X[1]
@@ -319,7 +366,7 @@ def or_gate():
                              number_of_iterations=5000, learning_rate=.1,
                              print_cost=True, print_rate=500)
 
-    # Test the model.
+    # Validate the model.
     Yhat, _ = test(X, Y, model_parameters, activation_functions)
     predictions = Yhat > 0.5
 
@@ -334,6 +381,8 @@ def or_and_xor_gates():
     Train a neural network to predict the output of OR, AND, and XOR gates.
     This is useful for testing code for multi-label classification.
     """
+
+    # Training data.
     X = np.array([[0, 1, 0, 1],
                   [0, 0, 1, 1]])
     Y = np.array([[0, 1, 1, 1],     # X[0] bitwise-OR X[1]
@@ -345,11 +394,11 @@ def or_and_xor_gates():
     activation_functions = [None, 'relu', 'sigmoid']
     model_parameters = train(X, Y,
                              layer_dimensions, activation_functions,
-                             number_of_iterations=200,
+                             number_of_iterations=500,
                              learning_rate=.1,
                              print_cost=True, print_rate=10)
 
-    # Test the model.
+    # Validate the model.
     Yhat, _ = test(X, Y, model_parameters, activation_functions)
     predictions = Yhat > 0.5
 
@@ -364,7 +413,7 @@ def or_and_xor_gates():
               'for which the model predicts', predictions[1][i].astype(int))
     print()
     for i in range(4):
-        print(X[1][i], 'XOR', X[0][i], '==', Y[1][i],
+        print(X[1][i], 'XOR', X[0][i], '==', Y[2][i],
               'for which the model predicts', predictions[2][i].astype(int))
 
 
@@ -408,8 +457,8 @@ def digits():
     activation_functions = [None, 'relu', 'softmax']
     model_parameters = train(X_train, Y_train,
                              layer_dimensions, activation_functions,
-                             L2=False, lambd=8,
-                             number_of_iterations=1000, learning_rate=0.3,
+                             L2=True, lambd=8,
+                             number_of_iterations=5000, learning_rate=0.3,
                              print_cost=True, print_rate=100)
 
     # Check how well the model performs on the training data.
