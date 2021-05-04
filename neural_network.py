@@ -93,7 +93,8 @@ def compute_activation(Z, activation_function):
     return A
 
 
-def forward(X, model_parameters, activation_functions):
+def forward(X, model_parameters, activation_functions,
+            dropout_nodes=None, dropout_probability=0):
     """
     Return a dictionary of activation values.  For each layer, l, greater
     than 1, the dictionary includes a key, Al, to a numpy array storing the
@@ -115,6 +116,11 @@ def forward(X, model_parameters, activation_functions):
         Z = linear_prediction(W, Aprev, b)
         A = compute_activation(Z, activation_function)
 
+        # Dropout regularization.
+        if dropout_nodes:
+            A *= dropout_nodes['D' + str(layer)]
+            A /= (1 - dropout_probability)
+
         activations["A" + str(layer)] = A
 
     return activations
@@ -126,16 +132,26 @@ def compute_cost(Yhat, Y,
 
     m = Y.shape[1]
 
+    # I think rather than use an offset use a mask, need to think a bit
+    # more about how.
+    offset = 1e-6
+
     if output_activation_function == 'softmax':
         # Only y == 1 needs to be considered because maximising the
         # corresponding output value necessitates the minimisation of the
         # other output values.
-        ones_loss = np.multiply(Y, np.ma.log(Yhat).filled(1e10))
-        cost = -1/m * np.sum(ones_loss)
+        cost = -1/m * np.sum(np.multiply(Y, np.log(Yhat + offset)))
+
+        # ones_loss = np.multiply(Y, np.ma.log(Yhat).filled(1e10))
+        # cost = -1/m * np.sum(ones_loss)
     else:
-        ones_loss = np.multiply(Y, np.ma.log(Yhat).filled(1e10))
-        zeros_loss = np.multiply((1 - Y), np.ma.log(1 - Yhat).filled(1e10))
-        cost = -1/m * np.sum(ones_loss + zeros_loss)
+        cost = (-1/m
+                * np.sum(np.multiply(Y, np.log(Yhat + offset))
+                         + np.multiply((1 - Y), np.log(1 - Yhat + offset))))
+
+        # ones_loss = np.multiply(Y, np.ma.log(Yhat).filled(1e10))
+        # zeros_loss = np.multiply((1 - Y), np.ma.log(1 - Yhat).filled(1e10))
+        # cost = -1/m * np.sum(ones_loss + zeros_loss)
 
     # L2 regularization.
     if L2:
@@ -203,7 +219,8 @@ def compute_linear_gradients(dZ, W, Aprev,
 
 def backward(Y, activations,
              model_parameters, activation_functions,
-             L2=False, lambd=0.5):
+             L2=False, lambd=0.5,
+             dropout_nodes=None, dropout_probability=0):
     """
     Return a dictionary of gradients.  For each layer, l, greater than 1,
     the dictionary includes keys, dWl, db, dA, to numpy arrays storing the
@@ -247,6 +264,11 @@ def backward(Y, activations,
 
         dW, db, dAprev = compute_linear_gradients(dZ, W, Aprev, L2, lambd)
 
+        # Dropout regularization.
+        if dropout_nodes:
+            dA *= dropout_nodes['D' + str(layer)]
+            dA /= (1 - dropout_probability)
+
         gradients['dW' + str(layer)] = dW
         gradients['db' + str(layer)] = db
         gradients['dA' + str(layer - 1)] = dAprev
@@ -271,6 +293,7 @@ def update_model_parameters(model_parameters, gradients, learning_rate):
 def train(X_train, Y_train,
           layer_dimensions, activation_functions,
           L2=False, lambd=0.5,
+          dropout=False, dropout_probability=0,
           number_of_iterations=1000, learning_rate=0.1,
           print_cost=False, print_rate=250):
 
@@ -289,9 +312,20 @@ def train(X_train, Y_train,
     costs = [[], []]
     for iteration in range(1, number_of_iterations + 1):
 
+        # Dropout regularization.
+        if dropout:
+            dropout_nodes = {}
+            for layer in range(1, number_of_layers):
+                node_score = np.random.rand(layer_dimensions[layer], 1)
+                nodes_to_dropout = node_score > dropout_probability
+                dropout_nodes['D' + str(layer)] = nodes_to_dropout
+        else:
+            dropout_nodes = None
+
         # Forward.
         activations = forward(X_train,
-                              model_parameters, activation_functions)
+                              model_parameters, activation_functions,
+                              dropout_nodes, dropout_probability)
         Yhat = activations['A' + str(number_of_layers - 1)]
         output_activation_function = activation_functions[number_of_layers - 1]
         cost = compute_cost(Yhat, Y_train,
@@ -301,7 +335,8 @@ def train(X_train, Y_train,
         # Backward.
         gradients = backward(Y_train, activations,
                              model_parameters, activation_functions,
-                             L2, lambd)
+                             L2, lambd,
+                             dropout_nodes, dropout_probability)
         model_parameters = update_model_parameters(model_parameters,
                                                    gradients,
                                                    learning_rate)
@@ -458,6 +493,7 @@ def digits():
     model_parameters = train(X_train, Y_train,
                              layer_dimensions, activation_functions,
                              L2=True, lambd=8,
+                             dropout=False, dropout_probability=0.1,
                              number_of_iterations=5000, learning_rate=0.3,
                              print_cost=True, print_rate=100)
 
